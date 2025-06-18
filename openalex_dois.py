@@ -7,31 +7,42 @@ import requests
 import csv
 import json
 
-#Import spreadsheet of DOIs to dataframe
-oa_output_df = pd.read_excel('/Users/filepath.xlsx', dtype={'Title': str, 'DOI': str})
-oa_output_df
+#Configure query
+URL = 'https://api.openalex.org/works/doi:{doi}'
+PER_PAGE = 100
+MAILTO = "jre2147@columbia.edu"
+if not MAILTO:
+    raise ValueError('Email address needed for polite pool')
 
-#Define function and set parameters
-def get_openalex_data(doi):
-    #Enter email address
-    mailto = 'youremail@youremail.com'
-    url = f'https://api.openalex.org/works/doi:{doi}'
-    if not mailto:
-        raise ValueError('Email address needed for polite pool')
-    params = {
-        'mailto': mailto,
-        'per-page': 100,
-        'select': 'id, doi, title, display_name, publication_year, type, corresponding_institution_ids, primary_location, open_access, apc_list, apc_paid, authorships, grants, primary_topic',
+params = {
+    'mailto': MAILTO,
+    'per-page': PER_PAGE,
+    'select': 'id, doi, title, display_name, publication_year, type, corresponding_institution_ids, primary_location, open_access, apc_list, apc_paid, authorships, grants, primary_topic',
 }
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.json()
 
-    else:
-        print(f'Error: {response.status_code}')
+input_file = '/location/input_file.xlsx' #Update with filepath and name
+output_file = f'/location/output_file.xlsx' #Update with desired filepath and name
+flattened_columns = ['primary_location', 'open_access', 'apc_list', 'apc_paid'] #Update flattened columns to include
+
+#Import spreadsheet of DOIs to dataframe
+input_file_df = pd.read_excel(input_file, dtype={'Title': str, 'DOI': str})
+print(input_file_df.head())
+
+#Define function
+def get_openalex_data(doi):
+    try:
+        response = requests.get(URL.format(doi=doi), params=params)
+        if response.status_code == 200:
+            return response.json()
+
+        else:
+            print(f'Error: {response.status_code}')
+            return None
+    except Exception as e:
+        print(f'Exception for DOI {doi}: {e}')
         return None
 
-dois = oa_output_df['DOI']
+dois = input_file_df['DOI']
 
 openalex_data = []
 for doi in dois:
@@ -44,7 +55,6 @@ output_openalex_df = pd.DataFrame(openalex_data)
 print(output_openalex_df.head())
 
 #Flatten nested fields, add to dataframes, and select columns to include
-
 primary_location_df = pd.json_normalize(openalex_data,
     record_path = None,
     meta = ['id', 'is_oa', 'landing_page_url',
@@ -132,9 +142,10 @@ flattened_df = reduce(
 )
 
 #Remove extraneous columns and merge with flattened data
-merged_df = flattened_df.drop(columns=['primary_location', 'open_access', 'apc_list', 'apc_paid'])
+merged_df = flattened_df.drop(columns=flattened_columns)
 
 #Merge dataframes together on id field
 final_df = merged_df.merge(primary_location_df, on = 'id', how = 'left')
 
-final_df.to_excel(f'/filepath/openalexoutput_flattenedFINAL.xlsx')
+final_df.to_excel(output_file)
+print((f"Data successfully exported to {output_file}"))
