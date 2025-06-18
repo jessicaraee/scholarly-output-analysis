@@ -7,20 +7,24 @@ import requests
 import csv
 import json
 
-#Enter calendar year, institution ID, and email address
-calendar_year = 2024
+#Configure query
+calendar_year = 2023
 institution_id = 'i00000000'
-mailto = 'youremail@youremail.com'
 
-url = 'https://api.openalex.org/works'
-if not mailto:
+URL = 'https://api.openalex.org/works'
+PER_PAGE = 100
+MAILTO = "youremail@youremail.com"
+if not MAILTO:
     raise ValueError('Email address needed for polite pool')
 
 params = {
-    'mailto': mailto,
+    'mailto': MAILTO,
     'filter': f'authorships.institutions.lineage:{institution_id},publication_year:{calendar_year}',
-    'per-page': 100,
+    'per-page': PER_PAGE,
 }
+
+output_file = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx' #Update with desired filepath and name
+output_columns = ['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic'] #Update flattened columns to include
 
 #Initialize cursor and loop through pages
 cursor = "*"
@@ -29,7 +33,7 @@ count_api_queries = 0
 
 while cursor:
     params["cursor"] = cursor
-    response = requests.get(url, params=params)
+    response = requests.get(URL, params=params)
     
     if response.status_code != 200:
         print(f'Error: {response.status_code} - {response.text}')
@@ -57,7 +61,6 @@ output_openalex_df = pd.DataFrame(all_results)
 print(output_openalex_df.head())
 
 #Flatten nested fields, add to dataframes, and select columns to include
-
 primary_location_df = pd.json_normalize(all_results,
     record_path = None,
     meta = ['id', 'is_oa', 'landing_page_url',
@@ -142,6 +145,6 @@ flattened_df = reduce(
 )
 
 #Remove extraneous columns and merge with flattened data
-final_df = flattened_df.drop(columns=['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic'])
+final_df = flattened_df.drop(columns=output_columns)
 
-final_df.to_excel(f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}_flattenedFINAL.xlsx')
+final_df.to_excel(output_file)
