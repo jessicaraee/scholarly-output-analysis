@@ -7,7 +7,7 @@ import csv
 import json
 
 #Configure query
-calendar_year = 2023
+calendar_year = 2024
 institution_id = 'i00000000'
 
 URL = 'https://api.openalex.org/works'
@@ -22,8 +22,8 @@ params = {
     'per-page': PER_PAGE,
 }
 
-export_filename = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx' #Update with desired filepath and name
-export_columns = ['id', 'doi', 'title', 'display_name', 'corresponding_institution_ids'] #Update fields to include
+output_file = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx' #Update with desired filepath and name
+output_columns = ['id', 'doi', 'title', 'display_name', 'corresponding_institution_ids'] #Update columns to include
 
 #Initialize cursor and loop through pages
 cursor = "*"
@@ -63,4 +63,4 @@ output_openalex_df = pd.DataFrame(all_results)
 print(output_openalex_df)
 
 #Export to XLSX
-output_openalex_df.to_excel(export_filename, columns=export_columns)
+output_openalex_df.to_excel(output_file, columns=output_columns)
