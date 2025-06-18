@@ -1,4 +1,4 @@
-#Query the OpenAlex API to pull a list of publications by CY and institution ID to combine with Scopus/Web of Science/other output and run back through the API for publication details using openalex_dois.py.
+#Use case: Query the OpenAlex API to pull a list of publications by CY and institution ID to combine with Scopus/Web of Science/other output and run back through the API for publication details using openalex_dois.py.
 
 #Import libraries
 import pandas as pd
