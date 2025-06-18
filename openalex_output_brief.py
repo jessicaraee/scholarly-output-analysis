@@ -6,21 +6,25 @@ import requests
 import csv
 import json
 
-#Enter calendar year and institution ID
+#Configure query
 calendar_year = 2023
 institution_id = 'i00000000'
 
-url = 'https://api.openalex.org/works'
-#Enter email address
-mailto = "youremail@youremail.com"
-if not mailto:
+URL = 'https://api.openalex.org/works'
+MAILTO = "youremail@youremail.com"
+if not MAILTO:
     raise ValueError('Email address needed for polite pool')
 
+PER_PAGE = 100
+
 params = {
-    'mailto': mailto,
+    'mailto': MAILTO,
     'filter': f'authorships.institutions.lineage:{institution_id},publication_year:{calendar_year}',
-    'per-page': 100,
+    'per-page': PER_PAGE,
 }
+
+export_filename = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx' #Update with desired filepath and name
+export_columns = ['id', 'doi', 'title', 'display_name', 'corresponding_institution_ids'] #Update fields to include
 
 #Initialize cursor and loop through pages
 cursor = "*"
@@ -30,7 +34,7 @@ count_api_queries = 0
 
 while cursor:
     params["cursor"] = cursor
-    response = requests.get(url, params=params)
+    response = requests.get(URL, params=params)
     if response.status_code != 200:
         print("Error")
         break
@@ -41,23 +45,23 @@ while cursor:
         if 'id' in result:
             result['id'] = result['id'].split('/')[-1]
 
-        #Remove 'https://' from DOI field if needed for matching later
+        #Remove 'https://' from DOI field for easier matching later
         if 'doi' in result and result['doi'].startswith("https://"):
             result['doi'] = result['doi'][len("https://"):]
         
         #Store results in list
         all_results.append(result)
+        
     count_api_queries += 1
 
-    #Update cursor, using the response's `next_cursor` metadata field
+    #Update cursor using response's 'next_cursor' field
     cursor = response.json()['meta']['next_cursor']
+    
 print(f"{count_api_queries} API queries, {len(all_results)} results.")
 
 #Add results to dataframe
 output_openalex_df = pd.DataFrame(all_results)
 print(output_openalex_df)
 
-export_filename = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx'
-
-#Identify columns to include and export to XLSX
-output_openalex_df.to_excel(export_filename, columns=['id', 'doi', 'title', 'display_name', 'corresponding_institution_ids'])
+#Export to XLSX
+output_openalex_df.to_excel(export_filename, columns=export_columns)
