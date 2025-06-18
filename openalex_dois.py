@@ -10,7 +10,7 @@ import json
 #Configure query
 URL = 'https://api.openalex.org/works/doi:{doi}'
 PER_PAGE = 100
-MAILTO = "jre2147@columbia.edu"
+MAILTO = "youremail@youremail.com"
 if not MAILTO:
     raise ValueError('Email address needed for polite pool')
 
