@@ -11,11 +11,10 @@ calendar_year = 2023
 institution_id = 'i00000000'
 
 URL = 'https://api.openalex.org/works'
+PER_PAGE = 100
 MAILTO = "youremail@youremail.com"
 if not MAILTO:
     raise ValueError('Email address needed for polite pool')
-
-PER_PAGE = 100
 
 params = {
     'mailto': MAILTO,
