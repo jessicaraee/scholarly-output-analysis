@@ -24,7 +24,7 @@ params = {
 }
 
 output_file = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx' #Update with desired filepath and name
-output_columns = ['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic'] #Update flattened columns to include
+flattened_columns = ['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic'] #Update flattened columns to include
 
 #Initialize cursor and loop through pages
 cursor = "*"
@@ -145,6 +145,6 @@ flattened_df = reduce(
 )
 
 #Remove extraneous columns and merge with flattened data
-final_df = flattened_df.drop(columns=output_columns)
+final_df = flattened_df.drop(columns=flattened_columns)
 
 final_df.to_excel(output_file)
