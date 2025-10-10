@@ -24,17 +24,17 @@ params = {
     'per-page': PER_PAGE,
 }
 
-#Configure files
-OUTPUT_FILE = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx'
-FLATTENED_COLUMNS = ['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic']
-
-#Initialize cursor and loop through pages, allowing for wait times if errors
 cursor = "*"
 all_results = []
 count_api_queries = 0
 max_retries = 5
 polite_delay = 1.2
 
+#Configure files
+OUTPUT_FILE = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx'
+FLATTENED_COLUMNS = ['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic']
+
+#Fetch data, allowing for retries if errors
 while cursor:
     params["cursor"] = cursor
     retries = 0
