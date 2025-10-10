@@ -29,6 +29,7 @@ count_api_queries = 0
 max_retries = 5
 polite_delay = 1.2
 
+#Configure files
 OUTPUT_FILE = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx'
 OUTPUT_COLUMNS = ['id', 'doi', 'title', 'display_name', 'corresponding_institution_ids']
 
