@@ -5,12 +5,13 @@ import pandas as pd
 import requests
 import csv
 import json
+import time
 
 #Configure query
 calendar_year = 2024
 institution_id = 'i00000000'
 
-URL = 'https://api.openalex.org/works'
+URL = 'https://api.openalex.org/works?data-version=2'
 PER_PAGE = 100
 MAILTO = "youremail@youremail.com"
 if not MAILTO:
@@ -22,45 +23,66 @@ params = {
     'per-page': PER_PAGE,
 }
 
-output_file = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx' #Update with desired filepath and name
-output_columns = ['id', 'doi', 'title', 'display_name', 'corresponding_institution_ids'] #Update columns to include
+OUTPUT_FILE = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx'
+OUTPUT_COLUMNS = ['id', 'doi', 'title', 'display_name', 'corresponding_institution_ids']
 
-#Initialize cursor and loop through pages
+#Initialize cursor and loop through pages, allowing for wait times if errors
 cursor = "*"
-
 all_results = []
 count_api_queries = 0
+max_retries = 5
+polite_delay = 1.2
 
 while cursor:
     params["cursor"] = cursor
-    response = requests.get(URL, params=params)
-    if response.status_code != 200:
-        print("Error")
+    retries = 0
+
+    while retries < max_retries:
+        response = requests.get(URL, params=params)
+
+        #Too many requests
+        if response.status_code == 429:
+            wait_time = int(response.headers.get("Retry after", 5))
+            print(f"Rate limited! Waiting {wait_time} seconds.")
+            time.sleep(wait_time)
+            retries += 1
+            continue
+
+        #Transient error
+        if response.status_code >= 500:
+            print(f"Server error {response.status_code}. Retry #{retries+1}/{max_retries}.")
+            time.sleep(3)
+            retries += 1
+            continue
+
+        #Other errors
+        if response.status_code != 200:
+            print(f"Error {response.status_code}: {response.text}")
+            response.raise_for_status()
+
+        data = response.json()
+        this_page_results = data.get('results', [])
+        
+        for result in this_page_results:
+            if 'id' in result:
+                result['id'] = result['id'].split('/')[-1] #Remove 'https://' from ID field
+
+            all_results.append(result)
+
+        cursor = data.get('meta', {}).get('next_cursor') #Update cursor
+
+        count_api_queries += 1
+
+        time.sleep(polite_delay)
         break
-    this_page_results = response.json()['results']
-    for result in this_page_results:
-        
-        #Remove 'https://' from ID field
-        if 'id' in result:
-            result['id'] = result['id'].split('/')[-1]
+    else:
+        print("Too many failed attempts! Stopping process.")
+        break
 
-        #Remove 'https://' from DOI field for easier matching later
-        if 'doi' in result and result['doi'].startswith("https://"):
-            result['doi'] = result['doi'][len("https://"):]
-        
-        #Store results in list
-        all_results.append(result)
-        
-    count_api_queries += 1
-
-    #Update cursor using response's 'next_cursor' field
-    cursor = response.json()['meta']['next_cursor']
-    
 print(f"{count_api_queries} API queries, {len(all_results)} results.")
 
-#Add results to dataframe
+#Add results to dataframe and export
 output_openalex_df = pd.DataFrame(all_results)
 print(output_openalex_df)
 
-#Export to XLSX
-output_openalex_df.to_excel(output_file, columns=output_columns)
+output_openalex_df.to_excel(OUTPUT_FILE, columns=OUTPUT_COLUMNS)
