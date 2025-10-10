@@ -11,7 +11,7 @@ import json
 calendar_year = 2023
 institution_id = 'i00000000'
 
-URL = 'https://api.openalex.org/works'
+URL = 'https://api.openalex.org/works?data-version=2'
 PER_PAGE = 100
 MAILTO = "youremail@youremail.com"
 if not MAILTO:
@@ -23,36 +23,62 @@ params = {
     'per-page': PER_PAGE,
 }
 
-output_file = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx' #Update with desired filepath and name
-flattened_columns = ['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic'] #Update flattened columns to include
+#Configure files
+OUTPUT_FILE = f'/filepath/openalexoutput_{institution_id}_CY{calendar_year}.xlsx'
+FLATTENED_COLUMNS = ['primary_location', 'open_access', 'apc_list', 'apc_paid', 'primary_topic']
 
-#Initialize cursor and loop through pages
+#Initialize cursor and loop through pages, allowing for wait times if errors
 cursor = "*"
 all_results = []
 count_api_queries = 0
+max_retries = 5
+polite_delay = 1.2
 
 while cursor:
     params["cursor"] = cursor
-    response = requests.get(URL, params=params)
-    
-    if response.status_code != 200:
-        print(f'Error: {response.status_code} - {response.text}')
-        break
-    
-    this_page_results = response.json()['results']
-    
-    for result in this_page_results:
-        #Remove 'https://' from ID field
-        if 'id' in result:
-            result['id'] = result['id'].split('/')[-1]
+    retries = 0
+
+    while retries < max_retries:
+        response = requests.get(URL, params=params)
+
+        #Too many requests
+        if response.status_code == 429:
+            wait_time = int(response.headers.get("Retry after", 5))
+            print(f"Rate limited! Waiting {wait_time} seconds.")
+            time.sleep(wait_time)
+            retries += 1
+            continue
+
+        #Transient error
+        if response.status_code >= 500:
+            print(f"Server error {response.status_code}. Retry #{retries+1}/{max_retries}.")
+            time.sleep(3)
+            retries += 1
+            continue
+
+        #Other errors
+        if response.status_code != 200:
+            print(f"Error {response.status_code}: {response.text}")
+            response.raise_for_status()
+
+        data = response.json()
+        this_page_results = data.get('results', [])
         
-        #Store results in list
-        all_results.append(result)
+        for result in this_page_results:
+            if 'id' in result:
+                result['id'] = result['id'].split('/')[-1] #Remove 'https://' from ID field
 
-    count_api_queries += 1
+            all_results.append(result)
 
-    #Update cursor
-    cursor = response.json()['meta']['next_cursor']
+        cursor = data.get('meta', {}).get('next_cursor') #Update cursor
+
+        count_api_queries += 1
+
+        time.sleep(polite_delay)
+        break
+    else:
+        print("Too many failed attempts! Stopping process.")
+        break
 
 print(f"{count_api_queries} API queries, {len(all_results)} results.")
 
@@ -61,11 +87,11 @@ output_openalex_df = pd.DataFrame(all_results)
 print(output_openalex_df.head())
 
 #Flatten nested fields, add to dataframes, and select columns to include
+#['source', 'issn'] and 'primary_location.source.issn' from primary_location_df since field may no longer be in data
 primary_location_df = pd.json_normalize(all_results,
     record_path = None,
     meta = ['id', 'is_oa', 'landing_page_url',
-    ['source', 'display_name'], ['source', 'issn_l'],
-    ['source', 'issn'], ['source', 'is_oa'],
+    ['source', 'display_name'], ['source', 'issn_l'], ['source', 'is_oa'],
     ['source', 'is_in_doaj'], ['source', 'host_organization_name'],
     ['source', 'host_organization_lineage_names'], ['source', 'type'],
     'is_accepted', 'is_published'],
@@ -75,7 +101,7 @@ primary_location_df = pd.json_normalize(all_results,
 
 primary_location_df = primary_location_df[
     ['id', 'primary_location.is_oa', 'primary_location.landing_page_url', 'primary_location.source.display_name',
-    'primary_location.source.issn_l', 'primary_location.source.issn',
+    'primary_location.source.issn_l', 
     'primary_location.source.is_oa', 'primary_location.source.is_in_doaj',
     'primary_location.source.host_organization_name', 'primary_location.source.host_organization_lineage_names',
     'primary_location.source.type', 'primary_location.is_accepted', 'primary_location.is_published']
@@ -127,24 +153,28 @@ primary_topic_df = primary_topic_df[
     'primary_topic.field.display_name', 'primary_topic.domain.display_name']
 ]
 
-dfs = [output_openalex_df, primary_location_df, open_access_df, apc_list_df, apc_paid_df, primary_topic_df]
+#Merge dataframes and export results
+dfs = [output_openalex_df, primary_location_df, open_access_df, primary_topic_df]
 
-#Exclude unnecessary abstract_inverted_index fields
-exclude_substring = 'abstract_inverted_index'
+exclude_substring = 'abstract_inverted_index' #Exclude abstract_inverted_index fields that result in extra blank columns
 dfs = [
     df.drop(columns=df.filter(like=exclude_substring).columns, errors='ignore')
     for df in dfs
 ]
 
-#Merge dataframes on id field
 flattened_df = reduce(
     lambda left, right: pd.merge(
-        left, right, on = 'id', how = 'left', suffixes = ('', '_dup')
+        left, right, on='id', how='left'
     ),
     dfs
 )
 
-#Remove extraneous columns and merge with flattened data
-final_df = flattened_df.drop(columns=flattened_columns)
+final_df = flattened_df.drop(columns=FLATTENED_COLUMNS) #Remove any extra columns that may be left and merge with flattened data
 
-final_df.to_excel(output_file)
+print("\nFinal DataFrame Before Export:")
+print(final_df.head())
+print(final_df.info())
+print(final_df.dtypes)
+
+final_df.to_excel(OUTPUT_FILE)
+print((f"Data successfully exported to {OUTPUT_FILE}."))
