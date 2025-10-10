@@ -6,6 +6,7 @@ from functools import reduce
 import requests
 import csv
 import json
+import time
 
 #Configure query
 calendar_year = 2023
