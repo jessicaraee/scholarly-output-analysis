@@ -87,7 +87,6 @@ output_openalex_df = pd.DataFrame(all_results)
 print(output_openalex_df.head())
 
 #Flatten nested fields, add to dataframes, and select columns to include
-#['source', 'issn'] and 'primary_location.source.issn' from primary_location_df since field may no longer be in data
 primary_location_df = pd.json_normalize(all_results,
     record_path = None,
     meta = ['id', 'is_oa', 'landing_page_url',
