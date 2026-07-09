@@ -24,14 +24,11 @@ institution_id = list(institution_map.keys())[0]
 #Set any filter to None to pull everything
 FILTER_OA_STATUS = None             #"bronze", "diamond", "gold", "green", "hybrid", "closed"
 FILTER_IS_OA = None                 #True, False
-FILTER_TYPE = "dataset"             #"article", "book", "book-chapter", "dataset", "editorial", "erratum", "letter", "paratext", "peer-review", "preprint", "reference-entry", "report", "review", "other"
+FILTER_TYPE = "article"             #"article", "book", "book-chapter", "dataset", "editorial", "erratum", "letter", "paratext", "peer-review", "preprint", "reference-entry", "report", "review", "other"
 FILTER_ISSN = None                  #ex. "0000-0000"
 FILTER_DOMAIN = None                #"1" = Life Sciences, "2" = Social Sciences, "3" = Physical Sciences, "4" = Health Sciences
-FILTER_FIELD = "2"                  #See OpenAlex_TaxonomyMatrix for field numbers
-FILTER_SUBFIELD = None              #See OpenAlex_TaxonomyMatrix for subfield numbers
-FILTER_TOPIC = None                 #See OpenAlex_TaxonomyMatrix for topic numbers
 FILTER_GRANTS = False               #False = all results, True = only if awards field is not blank
-FILTER_INSTITUTION_QUERY = True           #False = institution_id only, True = institution_id + text search
+FILTER_INSTITUTION_QUERY = True     #False = institution_id only, True = institution_id + text search
 
 INSTITUTION_QUERY_STRING = (
   '("Institution Var1" OR "Institution Var2" OR "Institution Var3")'
@@ -184,15 +181,6 @@ for inst_id, inst_name in institution_map.items():
         if FILTER_DOMAIN:
             api_filters["primary_topic"] = {"domain": {"id": str(FILTER_DOMAIN)}}
 
-        if FILTER_FIELD:
-            api_filters["primary_topic"] = {"field": {"id": str(FILTER_FIELD)}}
-
-        if FILTER_SUBFIELD:
-            api_filters["primary_topic"] = {"subfield": {"id": str(FILTER_SUBFIELD)}}
-
-        if FILTER_TOPIC:
-            api_filters["primary_topic"] = {"id": str(FILTER_TOPIC)}
-
         #Run institution id query and filter based on parameters      
         id_query = Works().filter(
             authorships={"institutions": {"lineage": inst_id}},
@@ -239,7 +227,7 @@ for inst_id, inst_name in institution_map.items():
                 if not grants:
                     continue 
 
-            work_data["Match Source"] = source_flag
+            work_data["Match Type"] = source_flag
             all_results.append(work_data)
 
         count_found = len(all_results)
