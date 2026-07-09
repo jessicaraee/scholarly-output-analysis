@@ -19,6 +19,25 @@ institution_map = {
   "institution_id3": "institution_name3"
 }
 
+institution_id = list(institution_map.keys())[0]
+
+#Set any filter to None to pull everything
+FILTER_OA_STATUS = None             #"bronze", "diamond", "gold", "green", "hybrid", "closed"
+FILTER_IS_OA = None                 #True, False
+FILTER_TYPE = "dataset"             #"article", "book", "book-chapter", "dataset", "editorial", "erratum", "letter", "paratext", "peer-review", "preprint", "reference-entry", "report", "review", "other"
+FILTER_ISSN = None                  #ex. "0000-0000"
+FILTER_DOMAIN = None                #"1" = Life Sciences, "2" = Social Sciences, "3" = Physical Sciences, "4" = Health Sciences
+FILTER_FIELD = "2"                  #See OpenAlex_TaxonomyMatrix for field numbers
+FILTER_SUBFIELD = None              #See OpenAlex_TaxonomyMatrix for subfield numbers
+FILTER_TOPIC = None                 #See OpenAlex_TaxonomyMatrix for topic numbers
+FILTER_GRANTS = False               #False = all results, True = only if awards field is not blank
+FILTER_INSTITUTION_QUERY = True           #False = institution_id only, True = institution_id + text search
+
+INSTITUTION_QUERY_STRING = (
+  '("Institution Var1" OR "Institution Var2" OR "Institution Var3")'
+  'NOT "Wrong Institution1" NOT "Wrong Institution2"'
+)
+
 API_KEY = "key"
 MAILTO = "youremail@youremail.com"
 if not MAILTO:
@@ -35,6 +54,7 @@ OUTPUT_XLSX = OUTPUT_CSV.replace(".csv", ".xlsx")
 
 #Select output columns
 columns_to_keep = [
+    "Match Type",
     "id",
     "doi",
     "title",
@@ -136,69 +156,91 @@ first_write = True
 total_harvested = 0
 
 #Loop through quarterly harvest
-GRANTS_FILTER = False   #False = all results, True = only if awards field is not blank
-TEXT_FILTER = True    #False = institution_id only, True = institution_id + text search
-
 for inst_id, inst_name in institution_map.items():
     for quarter_label, start_str, end_str in quarters:
         print(f"\nProcessing {inst_name} {quarter_label}: {start_str}→{end_str}")
         
         combined_works = {}
 
-        print("Fetching records matching institution id and filters!")
-        
-        #Update or comment out filters as needed
+        api_filters = {
+            "from_publication_date": start_str,
+            "to_publication_date": end_str,
+        }
+
+        if FILTER_OA_STATUS:
+            api_filters["open_access"] = {"oa_status": str(FILTER_OA_STATUS)}
+
+        if FILTER_IS_OA is not None:
+            if "open_access" not in api_filters:
+                api_filters["open_access"] = {}
+            api_filters["open_access"]["is_oa"] = FILTER_IS_OA
+
+        if FILTER_TYPE:
+            api_filters["type"] = str(FILTER_TYPE)
+
+        if FILTER_ISSN:
+            api_filters["primary_location"] = {"source": {"issn_l": str(FILTER_ISSN)}}
+
+        if FILTER_DOMAIN:
+            api_filters["primary_topic"] = {"domain": {"id": str(FILTER_DOMAIN)}}
+
+        if FILTER_FIELD:
+            api_filters["primary_topic"] = {"field": {"id": str(FILTER_FIELD)}}
+
+        if FILTER_SUBFIELD:
+            api_filters["primary_topic"] = {"subfield": {"id": str(FILTER_SUBFIELD)}}
+
+        if FILTER_TOPIC:
+            api_filters["primary_topic"] = {"id": str(FILTER_TOPIC)}
+
+        #Run institution id query and filter based on parameters      
         id_query = Works().filter(
-            from_publication_date=start_str,
-            to_publication_date=end_str,
-            authorships={"institutions": {"lineage": inst_id}}
-            #open_access={"is_oa": is_oa}
-            #type="article"
-            #primary_topic={"domain": {"id": "2"}}, #1=Life Sciences, 2=Social Sciences, 3=Physical Sciences, 4=Health Sciences             
+            authorships={"institutions": {"lineage": inst_id}},
+            **api_filters
         )
         
         for page in id_query.paginate(per_page=100, n_max=None):
             for work in page:
-                combined_works[work["id"]] = work
+                w_id = work["id"]
+                combined_works[work["id"]] = {
+                    "data": work,
+                    "source": "Institution ID Query"
+                }
 
-        if TEXT_FILTER:
-            print("Looking for backup text matches from author affiliations data!")
-            
-            clean_id = inst_id.split("/")[-1] if "/" in inst_id else inst_id
-            
-            #Update as needed based on what institution is being searched for
-            text_query_string = (
-                '("Institution Var1" OR "Institution Var2" OR '
-                '"Institution Var3") '
-                'NOT "Wrong Institution1" NOT "Wrong Institution2"'
-            )
-            
-            affiliation_filter = {
-                "raw_affiliation_strings.search": text_query_string,
-                "from_publication_date": start_str,
-                "to_publication_date": end_str,
-                "primary_topic": {"domain": {"id": "2"}},             
-                "type": "article"
-            }
+        #Run backup text query
+        if FILTER_INSTITUTION_QUERY:
+            affiliation_filter = api_filters.copy()
+            affiliation_filter["raw_affiliation_strings.search"] = INSTITUTION_QUERY_STRING
             
             text_query = Works().filter(**affiliation_filter)
 
+            #Tag match type
             for page in text_query.paginate(per_page=100, n_max=None):
                 for work in page:
-                    combined_works[work["id"]] = work
+                    w_id = work["id"]
+                    if w_id in combined_works:
+                        combined_works[w_id]["source"] = "Institution ID"
+                    else:
+                        combined_works[w_id] = {
+                            "data": work,
+                            "source": "Text Query Fallback"
+                        }
         else:
-            print("Backup text matches toggled off!")
+            print("FILTER_INSTITUTION_QUERY turned off, searched by Institution ID only.")
 
-        #Fetch all pages for this institution + quarter
+        #Apply grants filter
         all_results = []
-        for work_id, work in combined_works.items():
+        for work_id, wrapper in combined_works.items():
+            work_data = wrapper["data"]
+            source_flag = wrapper["source"]
             
-            if GRANTS_FILTER:
-                grants = work.get("grants", []) or work.get("awards", [])
+            if FILTER_GRANTS:
+                grants = work_data.get("grants", []) or work_data.get("awards", [])
                 if not grants:
                     continue 
 
-            all_results.append(work)
+            work_data["Match Source"] = source_flag
+            all_results.append(work_data)
 
         count_found = len(all_results)
         print(f"Found {count_found} unique combined works for {quarter_label}.")
@@ -214,7 +256,7 @@ for inst_id, inst_name in institution_map.items():
         df_slice = flatten_results(all_results)
         df_slice = df_slice.drop_duplicates(subset="id")
 
-        #Append results to csv to be converted later
+        #Append results to temporary csv
         df_slice.to_csv(
             OUTPUT_CSV,
             mode="a",
@@ -230,19 +272,18 @@ for inst_id, inst_name in institution_map.items():
 print(f"\nHarvest complete! {total_harvested} total unique works found.")
 
 #Change returned URLs to text, convert csv to xlsx, and export data
-df_full = pd.read_csv(OUTPUT_CSV)
-url_columns = [
-    "doi",
-    "primary_location.landing_page_url"
-]
-
-for col in url_columns:
-    if col in df_full.columns:
-        df_full[col] = df_full[col].apply(lambda x: f"'{str(x)}" if pd.notna(x) else "")
-
-df_full.to_excel(OUTPUT_XLSX, index=False)
-print(f"Done! File exported to {OUTPUT_XLSX}.")
-
 if os.path.exists(OUTPUT_CSV):
+    df_full = pd.read_csv(OUTPUT_CSV)
+    url_columns = ["doi", "primary_location.landing_page_url"]
+
+    for col in url_columns:
+        if col in df_full.columns:
+            df_full[col] = df_full[col].apply(lambda x: f"'{str(x)}" if pd.notna(x) else "")
+
+    df_full.to_excel(OUTPUT_XLSX, index=False)
+    print(f"Done! File exported to {OUTPUT_XLSX}.")
+
     os.remove(OUTPUT_CSV)
     print(f"Temporary csv {OUTPUT_CSV} deleted.")
+else:
+    print("\nNo records matched the criteria so no output files were created.")
