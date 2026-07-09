@@ -1,5 +1,5 @@
 #Use case: Use the pyalex wrapper to query the OpenAlex API to pull a detailed list of publications by CY and institution ID, customizing included fields as needed.
-#Updated 7/8/2026 to add topic filter, type filter, grant filter toggle, and text search filter.
+#Updated 7/9/2026 to add topic filter, type filter, grant filter toggle, and text search filter.
 
 #Import libraries
 import pandas as pd
@@ -106,10 +106,10 @@ columns_to_keep = [
     "open_access.any_repository_has_fulltext",
     "apc_list.value_usd",
     "apc_paid.value_usd",
-    "primary_topic.display_name",
-    "primary_topic.subfield.display_name",
+    "primary_topic.domain.display_name",
     "primary_topic.field.display_name",
-    "primary_topic.domain.display_name"
+    "primary_topic.subfield.display_name",
+    "primary_topic.display_name"
 ]
 
 FINAL_COLUMNS = ["Institution", "InstitutionID"] + columns_to_keep
